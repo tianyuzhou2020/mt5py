@@ -1,0 +1,144 @@
+import mt5py as mp 
+import talib
+import MetaTrader5 as mt5
+from time import sleep
+from talib import MA_Type
+
+name = 'EURUSD'   #选择目标货币对
+
+###初始统计指标设定###
+total_profit = 0
+total_order_placed = 0
+total_order_finished = 0
+total_win = 0
+total_win_number = 0
+total_lose=0
+total_lose_number = 0
+###开始无限循环，直到手动停止###
+while 1:
+    #抓取50000个历史5分钟interval数据
+    df = mp.historical_M5(name,50000)
+    #计算布林带数据    
+    df['upperband'],df['avg'],df['lowerband'] =talib.BBANDS(df['close'], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
+    #计算RSI数据
+    df['rsi'] = talib.RSI(df['close'], timeperiod=3)
+    #计算KD数据
+    df['k'], df['d'] = talib.STOCH(df['high'], df['low'], df['close'], fastk_period=5, slowk_period=3, slowk_matype=MA_Type.SMA, slowd_period=3, slowd_matype=MA_Type.SMA)
+    #df['macd'],df['macdsignal'],df['macdhist'] = talib.MACD(df['close'],fastperiod = 12,slowperiod = 36, signalperiod=12)
+    #计算50，100 EMA数据
+    df['50ema'] = talib.EMA(df['close'], timeperiod=50)
+    df['100ema'] =talib.EMA(df['close'], timeperiod=100)
+    #抓取止损价格限制，买入价格，卖出价格
+    sll = mt5.symbol_info(name).trade_stops_level
+    priceask = mt5.symbol_info_tick(name).ask
+    pricebid = mt5.symbol_info_tick(name).bid
+    #做多条件
+    long1 = 
+    long2 = 
+    #做空条件
+    short1 =
+    short2 = 
+    #多单平仓条件
+    sell_long = 
+    #空单平仓条件
+    sell_short= 
+    #如果目前无订单
+    if len(mp.check_position()) == 0:
+        #满足所有做多条件
+        if long1 and long2:
+            #市价买入，单位5，最小止损价格止损
+            mp.buy_now(name,5.00,sl=pricebid-sll*0.00001)
+            #下单数加1
+            total_order_placed = total_order_placed +1
+        #满足所有做空条件
+        elif short1 and short2:
+            #市价卖出，单位5，最小止损价格止损
+            mp.sell_now(name,5.00, sl = priceask+sll*0.00001)
+            #下单数加1
+            total_order_placed = total_order_placed +1
+    #如果目前有订单        
+    elif len(mp.check_position()) == 1:
+        #订单种类为多
+        if mp.check_position()['type'].values == 0:
+            #如果满足多单平仓条件
+            if sell_long:
+                #计算收益
+                profit = mp.check_position()['profit'].values
+                #平仓
+                mp.close_long(name)
+                #暂停5分钟 防止价格波动导致重复触发买入卖出条件
+                sleep(300)
+                #总收益计算
+                total_profit = total_profit+profit
+                print('收益：',profit,'long 平仓',)
+                #完成订单数加1
+                total_order_finished =total_order_finished+1
+                #如果收益为正
+                if profit >0:
+                    #总获利累加，获利单数加1
+                    total_win = total_win+profit
+                    total_win_number =total_win_number+1
+                #如果收益为负
+                elif profit <0:
+                    #总亏损累加，亏损单数加1
+                    total_lose = total_lose + profit
+                    total_lose_number=total_lose_number+1
+                #分隔符
+                print('-----------------------------------')
+        #订单种类为空
+        elif mp.check_position()['type'].values == 1:
+            #如果满足空单平仓条件
+            if sell_short:
+                #计算收益
+                profit = mp.check_position()['profit'].values
+                #平仓
+                mp.close_short(name)
+                #暂停5分钟 防止价格波动导致重复触发买入卖出条件
+                sleep(300)
+                #总收益计算
+                total_profit = total_profit+profit
+                print('收益：',profit,'short 平仓')      
+                #完成订单数加1
+                total_order_finished = total_order_finished+1
+                 #如果收益为正
+                if profit >0:
+                    #总获利累加，获利单数加1
+                    total_win = total_win+profit
+                    total_win_number = total_win_number+1
+                #如果收益为负
+                elif profit <0:
+                    #总亏损累加，亏损单数加1
+                    total_lose = total_lose + profit
+                    total_lose_number=total_lose_number+1
+                #分隔符
+                print('-----------------------------------')
+    #收益指标统计文本
+    f = open("EURUSD auto trading report.txt",'w', encoding='utf-8')
+    if  total_order_finished !=0 and    total_win_number !=0 and total_lose_number!= 0:
+        PW= total_win_number/total_order_finished
+        AW = total_win/total_win_number
+        PL=total_lose_number/total_order_finished
+        AL =total_lose/total_lose_number  
+    
+        f.write('净收益: ')
+        f.write(str(total_profit))
+        f.write('\n')
+        f.write('总收益: ')
+        f.write(str(total_win))
+        f.write('总损失')
+        f.write(str(total_lose))
+        f.write('总收益订单个数')
+        f.write(str(total_win_number))
+        f.write('总损失订单个数')
+        f.write(str(total_lose_number))
+        f.write('总下单数')
+        f.write(str(total_order_placed))
+        f.write('总闭单数')
+        f.write(str(total_order_finished))
+        f.write('batting average:')
+        f.write(str(total_win_number/total_order_finished))
+        f.write('win/loss:')
+        f.write(str((total_win/total_win_number)/abs(total_lose/total_lose_number)))
+        f.write('APPT:')
+        f.write(str((PW*AW)-(PL*AL)))
+    f.close
