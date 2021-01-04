@@ -1,5 +1,5 @@
 # Mt5py
-Trading bot by Python using MT5 platform.
+Trading bot by Python based on MT5 platform.
 ``` 
 initial.py (open MT5)
 mt5py.py define functions
