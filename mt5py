@@ -1,0 +1,228 @@
+#function
+import MetaTrader5 as mt5
+import pandas as pd
+
+def historical_M5(name,number):
+    time_interval = mt5.TIMEFRAME_M5
+    
+    rates = mt5.copy_rates_from_pos(name, time_interval, 0, number)
+     
+    # 从所获得的数据创建DataFrame
+    rates_frame = pd.DataFrame(rates)
+    # 将时间（以秒为单位）转换为日期时间格式
+    rates_frame['time']=pd.to_datetime(rates_frame['time'], unit='s')
+    rates_frame.set_index('time',inplace=True)                           
+    # 显示数据
+    return(rates_frame)  
+def historical_M1(name,number):
+    time_interval = mt5.TIMEFRAME_M1
+    
+    rates = mt5.copy_rates_from_pos(name, time_interval, 0, number)
+     
+    # 从所获得的数据创建DataFrame
+    rates_frame = pd.DataFrame(rates)
+    # 将时间（以秒为单位）转换为日期时间格式
+    rates_frame['time']=pd.to_datetime(rates_frame['time'], unit='s')
+    rates_frame.set_index('time',inplace=True)                           
+    # 显示数据
+    return(rates_frame)  
+def historical_M30(name,number):
+    time_interval = mt5.TIMEFRAME_M30
+    
+    rates = mt5.copy_rates_from_pos(name, time_interval, 0, number)
+     
+    # 从所获得的数据创建DataFrame
+    rates_frame = pd.DataFrame(rates)
+    # 将时间（以秒为单位）转换为日期时间格式
+    rates_frame['time']=pd.to_datetime(rates_frame['time'], unit='s')
+    rates_frame.set_index('time',inplace=True)                           
+    # 显示数据
+    return(rates_frame)  
+def historical_H1(name,number):
+    time_interval = mt5.TIMEFRAME_H1
+    
+    rates = mt5.copy_rates_from_pos(name, time_interval, 0, number)
+     
+    # 从所获得的数据创建DataFrame
+    rates_frame = pd.DataFrame(rates)
+    # 将时间（以秒为单位）转换为日期时间格式
+    rates_frame['time']=pd.to_datetime(rates_frame['time'], unit='s')
+    rates_frame.set_index('time',inplace=True)                           
+    # 显示数据
+    return(rates_frame)  
+def historical_D1(name,number):
+    time_interval = mt5.TIMEFRAME_D1
+    
+    rates = mt5.copy_rates_from_pos(name, time_interval, 0, number)
+     
+    # 从所获得的数据创建DataFrame
+    rates_frame = pd.DataFrame(rates)
+    # 将时间（以秒为单位）转换为日期时间格式
+    rates_frame['time']=pd.to_datetime(rates_frame['time'], unit='s')
+    rates_frame.set_index('time',inplace=True)                           
+    # 显示数据
+    return(rates_frame)  
+
+def price_check(name):
+    mt5.symbol_select(name,True)
+    symbol2=mt5.symbol_info_tick(name)
+    # print(name,"买入 price =",symbol2.bid)
+    # print(name,"卖出 price =",symbol2.ask)
+    # print(name,"time =",symbol2.time)
+    return [symbol2.bid,symbol2.ask,symbol2.time] #买入[0] 卖出[1] 差价[2]
+
+def check_position():
+    #print('----------------------------------------------------')
+    positions=mt5.positions_get()
+    if positions==():
+        df= {}
+        # if mt5.last_error()[0] == 1:
+        #     #print("目前共有0个仓位")
+        # else:
+            #print('Error!')
+    elif len(positions)>0:
+        #print('目前共有 {} 个仓位。'.format(len(positions)))
+        # display all open positions
+        df=pd.DataFrame(list(positions),columns=positions[0]._asdict().keys())
+        df['下单时间'] = pd.to_datetime(df['time'], unit='s')
+        df.drop(['identifier','time','magic','reason','swap','comment','time_update', 'time_msc', 'time_update_msc', 'external_id'], axis=1, inplace=True)
+        df.set_index('ticket',inplace=True)
+    return(df)
+
+def check_order():
+    #print('----------------------------------------------------')
+    orders=mt5.orders_get()
+    
+    if orders == ():
+        print("目前共有0个未交易订单")
+        return {}
+    else:
+        print("目前共有 {} 个未交易订单".format(len(orders)))
+        # display these orders as a table using pandas.DataFrame
+        df=pd.DataFrame(list(orders),columns=orders[0]._asdict().keys())    
+        df['time_setup'] = pd.to_datetime(df['time_setup'], unit='s')
+        df.drop(['type_time','comment','external_id','magic','time_setup_msc','time_setup','time_expiration','time_done', 'time_done_msc', 'position_id', 'position_by_id', 'reason', 'volume_initial', 'price_stoplimit'], axis=1, inplace=True)
+        
+        df.set_index('ticket',inplace=True)
+        return df
+
+def setup(ID,password,server):
+    if not mt5.initialize(login=ID, server=server ,password=password):
+        print("initialize() failed, error code =",mt5.last_error())
+    
+def shutdown():
+    mt5.shutdown()
+
+def buy_now(symbol,lot,sl=None,tp=None):#现价购买 可以设置止盈止损
+    
+    price = mt5.symbol_info_tick(symbol).ask
+    if sl ==None and tp==None:
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol, 
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_BUY,
+            "price": price,
+            "type_time": mt5.ORDER_TIME_GTC
+            }
+    else:
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol, 
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_BUY,
+            "price": price,
+            "sl": sl,
+            
+            "type_time": mt5.ORDER_TIME_GTC
+            }
+     
+    # 发送交易请求
+    result = mt5.order_send(request)
+    # 检查执行结果
+    #print("{}交易发出, 共计量{}， 发出价格{}，成交价格{},误差{}".format(symbol,lot,price,result.price,int((price-result.price)*100000)));
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print("2. order_send failed, retcode={}".format(result.retcode))
+
+    else:
+        print('Order sent!')
+
+
+def sell_now(symbol,lot,sl=None,tp=None): #现价卖出 可以设置止盈止损
+    
+    price = mt5.symbol_info_tick(symbol).bid
+    if sl ==None and tp==None:
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol, 
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_SELL,
+            "price": price,
+            "type_time": mt5.ORDER_TIME_GTC
+            }
+    else:
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol, 
+            "volume": lot,
+            "type": mt5.ORDER_TYPE_SELL,
+            "price": price,
+            "sl": sl,
+            
+            "type_time": mt5.ORDER_TIME_GTC
+            }
+     
+    # 发送交易请求
+    result = mt5.order_send(request)
+    # 检查执行结果
+    #print("{}交易发出, 共计量{}， 发出价格{}，成交价格{},误差{}".format(symbol,lot,price,result.price,int((price-result.price)*100000)));
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print("2. order_send failed, retcode={}".format(result.retcode))
+
+    else:
+        print('Order sent!')
+
+def close_long(name):
+    position= mt5.positions_get()[0].ticket
+    symbol = mt5.positions_get()[0].symbol
+    volume= mt5.positions_get()[0].volume
+    price= mt5.positions_get()[0].price_current
+    
+    request={
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": volume,
+        "price": price,
+        "type": mt5.ORDER_TYPE_SELL,
+        "position": position,
+        "type_time": mt5.ORDER_TIME_GTC,
+    }
+    
+    return mt5.order_send(request)
+
+
+def close_short(name):
+    position= mt5.positions_get()[0].ticket
+    symbol = mt5.positions_get()[0].symbol
+    volume= mt5.positions_get()[0].volume
+    price= mt5.positions_get()[0].price_current
+    
+    request={
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": volume,
+        "price": price,
+        "type": mt5.ORDER_TYPE_BUY,
+        "position": position,
+        "type_time": mt5.ORDER_TIME_GTC,
+    }
+    
+    return mt5.order_send(request)
+def STOCH(h, l, c, fastk_period, slowd_period):
+    hh = h.rolling(window=fastk_period).max()
+    ll = l.rolling(window=fastk_period).min()
+    fast_k = 100 * (c - ll) / (hh - ll)
+    slow_d = fast_k.rolling(window=slowd_period).mean()
+
+    return fast_k, slow_d
+
