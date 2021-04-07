@@ -1,0 +1,293 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Feb 24 19:31:32 2021
+
+@author: Tianyu.Zhou
+"""
+
+import mt5py as mp
+import talib 
+from time import sleep
+import MetaTrader5 as mt5
+# from time import sleep
+# from talib import MA_Type
+import time
+import threading
+# import matplotlib.pyplot as plt
+# from matplotlib.pyplot import plot, draw, show
+from datetime import datetime,timedelta
+
+    
+def trade(name,lot,sleeptime):
+    if name == 'EURUSD' and sleeptime ==300:
+        df1m=mp.historical_M1('EURUSD',50000)
+        df=mp.historical_M5('EURUSD',50000)
+
+    elif name == 'EURUSD' and sleeptime ==900:
+        df1m=mp.historical_M5('EURUSD',50000)
+        df=mp.historical_M15('EURUSD',50000)
+
+    elif name == 'AUDUSD' and sleeptime ==300:
+        df1m=mp.historical_M1('AUDUSD',50000)
+        df=mp.historical_M5('AUDUSD',50000)
+
+    elif name == 'AUDUSD' and sleeptime ==900:
+        df1m=mp.historical_M5('AUDUSD',50000)
+        df=mp.historical_M15('AUDUSD',50000)
+
+
+    df['k'], df['d'] = mp.STOCH(df['high'], df['low'], df['close'],5,3,3)
+    df1m['k'], df1m['d'] = mp.STOCH(df1m['high'], df1m['low'], df1m['close'],5,3,3)
+    #df['200ma']=talib.MA(df['close'], timeperiod=200)
+
+    trend_check_hl = mp.reverse_check_hl(df)
+    trend_check_hl1m = mp.reverse_check_hl(df1m)
+
+    trend_check_wavem = mp.reverse_check_m(df)
+
+    trend_check_sl = mp.reverse_check_wave(df)
+    #print(trend_check_sl)
+    sll = mt5.symbol_info(name).trade_stops_level
+
+    if name =='USDJPY':
+        level = 0.001
+        spread =sll*0.001 
+        extra = mt5.symbol_info(name).spread *0.001
+    elif name =='GBPUSD':
+        level = 0.00001
+        spread =sll*0.00001 
+        extra = mt5.symbol_info(name).spread *0.00001
+    elif name =='EURUSD':
+        level = 0.00001
+        spread =sll*0.00001
+        extra = 10 *0.00001
+    elif name =='AUDUSD':
+        level = 0.00001
+        spread =sll*0.00001
+        extra = 10 *0.00001
+    # if sleeptime==300 and trend_check_hl[0]==trend_check_hl15[0] and trend_check_hl[2]==trend_check_hl15[2]:
+    #     nosamewave = False
+    # else:
+    #     nosamewave = True
+
+    pricebid = mt5.symbol_info_tick(name).bid
+    priceask = mt5.symbol_info_tick(name).ask
+
+    nosamesell=True
+    nosamebuy=True
+    
+
+    deals = mt5.history_orders_get(trend_check_hl[-2], datetime.now()+ timedelta(hours=3), group=name)
+    for i in deals:
+        if i.comment== (str(round(trend_check_hl[2],5))+'_s_'+str(sleeptime)):
+            nosamesell = False
+        if i.comment== (str(round(trend_check_hl[0],5))+'_b_'+str(sleeptime)):
+            nosamebuy = False 
+    positions = mt5.positions_get(symbol=name)
+    for i in positions:
+        if i.comment== (str(round(trend_check_hl[2],5))+'_s_'+str(sleeptime)):
+            nosamesell = False
+        if i.comment== (str(round(trend_check_hl[0],5))+'_b_'+str(sleeptime)):
+            nosamebuy = False
+
+
+    if mp.is_time_between() and  mt5.symbol_info(name).spread <12:
+        
+        if df['k'][-1] <50 :
+            
+            #print('['+name+']'+'2.满足最小值 在最大值的index 之前')
+            if nosamesell :
+                #print('['+name+']'+'3.没有类似卖单')
+                #print(name,(trend_check_wavem[2]-(trend_check_wavem[0]-trend_check_wavem[2])) + extra< pricebid-2*extra,df['open'][-2] >= trend_check_hl[2] , df['close'][-1] < trend_check_hl[2])
+                if min(df1m['low'][trend_check_hl[-2]:trend_check_hl1m[-2]])<trend_check_hl[2] and df['close'][-1]<min(df1m['low'][trend_check_hl[-2]:trend_check_hl1m[-2]]):
+                    #print('test1')
+                    if (trend_check_wavem[2]-(trend_check_wavem[0]-trend_check_wavem[2])) + extra < pricebid-2*extra and df['open'][-2] >= trend_check_hl[2] and df['close'][-1] < trend_check_hl[2] :
+                        
+                        print('pricebid'+str(pricebid)+'大于止盈'+str((trend_check_wavem[2]-(trend_check_wavem[0]-trend_check_wavem[2]))))
+                        print(df['close'][-1],trend_check_hl[2])
+                        print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+                        mp.sell_now(name,lot, sl = trend_check_hl[0]+extra,tp= (trend_check_wavem[2]-(trend_check_wavem[0]-trend_check_wavem[2])) + extra,comment =str(round(trend_check_hl[2],5))+'_s_'+str(sleeptime))
+                        print('sl=', max(df['high'][-2],df['high'][-1])+extra)
+                        print('tp=', (trend_check_wavem[2]-(trend_check_wavem[0]-trend_check_wavem[2])) + extra)
+                        sleep(5)
+
+        #print(df['open'][-1]<= trend_check_hl[0]+0.00003,df['close'][-1]> trend_check_hl[0]+0.00003)   
+        if df['k'][-1] >50:
+            #print('['+name+']'+'2.满足最大值 在最小值的index之前')
+            
+            if nosamebuy : 
+                #print('['+name+']'+'3.没有类似买单')
+                if max(df1m['high'][trend_check_hl[-2]:trend_check_hl1m[-2]])>trend_check_hl[0] and df['close'][-1]>max(df1m['high'][trend_check_hl[-2]:trend_check_hl1m[-2]]):
+                    #print('1')
+                    if (trend_check_wavem[0]-trend_check_wavem[2])+trend_check_wavem[0] > priceask+2*extra and df['open'][-2]<= trend_check_hl[0] and df['close'][-1]> trend_check_hl[0] :
+             
+                        print('priceask'+str(priceask)+'小于止盈'+str((trend_check_wavem[0]-trend_check_wavem[2])+trend_check_wavem[0]))
+                        print(df['close'][-1], trend_check_hl[0])
+                        print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+                        mp.buy_now(name,lot, sl= trend_check_hl[2],tp= (trend_check_wavem[0]-trend_check_wavem[2])+trend_check_wavem[0],comment = str(round(trend_check_hl[0],5))+'_b_'+str(sleeptime))
+                        print('sl=',min(df['low'][-2],df['low'][-1]))
+                        print('tp=',(trend_check_wavem[0]-trend_check_wavem[2])+trend_check_wavem[0])
+                        sleep(5)
+
+
+
+    for i in range(len(mp.check_position(name))):
+        #if mt5.positions_get(symbol=name)[i].profit>0 :
+        if mt5.positions_get(symbol=name)[i].comment.split('_')[1] == 'b' and mt5.positions_get(symbol=name)[i].comment.split('_')[2] == str(sleeptime):
+            #if df['close'][-2] > float(mt5.positions_get(symbol=name)[i].comment.split('_')[1]):
+            if df[:(pd.to_datetime(mt5.positions_get(symbol=name)[i].time, unit='s'))].index[-1]==df.index[-1] and pricebid > mt5.positions_get(symbol=name)[i].tp-extra and mt5.positions_get(symbol=name)[i].tp-extra>mt5.positions_get(symbol=name)[i].sl:
+                request={
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": name,
+                    "sl":mt5.positions_get(symbol=name)[i].tp-extra,
+                    "tp":mt5.positions_get(symbol=name)[i].tp,
+                    "position": mt5.positions_get(symbol=name)[i].ticket,
+                    "type_time": mt5.ORDER_TIME_GTC,
+                    }
+                mt5.order_send(request)
+                print('即将触碰，锁定利润')
+            elif  min(df['low'][-2],df['low'][-1])>mt5.positions_get(symbol=name)[i].sl and (df['low'][-2] >= (mt5.positions_get(symbol=name)[i].price_open + mt5.positions_get(symbol=name)[i].tp)/2):
+                  print('['+name+']'+'当前价格到突破价格的距离大于突破价格到目标价格的距离的一半')
+                  request={
+                      "action": mt5.TRADE_ACTION_SLTP,
+                      "symbol": name,
+                      "sl":min(df['low'][-2],df['low'][-1]),
+                      "tp":mt5.positions_get(symbol=name)[i].tp,
+                      "position": mt5.positions_get(symbol=name)[i].ticket,
+                      "type_time": mt5.ORDER_TIME_GTC,
+                      }
+                  mt5.order_send(request) 
+                  
+            elif min(trend_check_sl[2],trend_check_hl[2])> mt5.positions_get(symbol=name)[i].sl:
+                request={
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": name,
+                    "sl":min(trend_check_sl[2],trend_check_hl[2]),
+                    "tp":mt5.positions_get(symbol=name)[i].tp,
+                    "position": mt5.positions_get(symbol=name)[i].ticket,
+                    "type_time": mt5.ORDER_TIME_GTC,
+                    }
+                mt5.order_send(request)
+                print('['+name+']'+'无止盈，修改止损至小波段最小值:'+str(trend_check_sl[2]))
+           
+        elif mt5.positions_get(symbol=name)[i].comment.split('_')[1] == 's' and mt5.positions_get(symbol=name)[i].comment.split('_')[2] == str(sleeptime):
+            # if df['close'][-2]<float(mt5.positions_get(symbol=name)[i].comment.split('_')[1]) :
+            if df[:(pd.to_datetime(mt5.positions_get(symbol=name)[i].time, unit='s'))].index[-1]==df.index[-1] and priceask < mt5.positions_get(symbol=name)[i].tp+extra and  mt5.positions_get(symbol=name)[i].tp+extra < mt5.positions_get(symbol=name)[i].sl:
+                request={
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": name,
+                    "sl":mt5.positions_get(symbol=name)[i].tp+extra,
+                    "tp":mt5.positions_get(symbol=name)[i].tp,
+                    "position": mt5.positions_get(symbol=name)[i].ticket,
+                    "type_time": mt5.ORDER_TIME_GTC,
+                    }
+                mt5.order_send(request)
+                print('即将触碰，锁定利润')
+            elif max(df['high'][-2],df['high'][-1]) < mt5.positions_get(symbol=name)[i].sl and ( df['high'][-2] <= (mt5.positions_get(symbol=name)[i].price_open + mt5.positions_get(symbol=name)[i].tp)/2):
+                  print('['+name+']'+'当前价格到突破价格的距离大于突破价格到目标价格的距离的一半')
+                  request={
+                      "action": mt5.TRADE_ACTION_SLTP,
+                      "symbol": name,
+                      "sl":max(df['high'][-2],df['high'][-1])+extra,
+                      "tp":mt5.positions_get(symbol=name)[i].tp,
+                      "position": mt5.positions_get(symbol=name)[i].ticket,
+                      "type_time": mt5.ORDER_TIME_GTC,
+                      }
+                  mt5.order_send(request) 
+            elif max(trend_check_sl[0],trend_check_hl[0])+extra <mt5.positions_get(symbol=name)[i].sl:
+                request={
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "symbol": name,
+                    "sl":max(trend_check_sl[0],trend_check_hl[0])+extra,
+                    "tp":mt5.positions_get(symbol=name)[i].tp,
+                    "position": mt5.positions_get(symbol=name)[i].ticket,
+                    "type_time": mt5.ORDER_TIME_GTC,
+                    }
+                mt5.order_send(request)
+                print('['+name+']'+'无止盈，修改止损至小波段最大值:'+str(trend_check_sl[0]+extra))
+
+                        
+                        
+def infiniteloop1():
+    while 1:    
+        #print('5')
+        try:
+        
+       # if mp.is_time_between() and mt5.symbol_info('EURUSD').spread <10:                      
+
+            trade('EURUSD',lot=0.01,sleeptime=300)
+        except Exception or AttributeError or IndexError:
+            pass
+def infiniteloop2():
+    while 1:  
+        #print('15')
+        try:   
+      #  if  mp.is_time_between() and mt5.symbol_info('EURUSD').spread <10:               
+            
+            trade('EURUSD',lot=0.01,sleeptime=900)
+        except Exception or AttributeError or  IndexError:
+            pass
+def infiniteloop3():
+    while 1:    
+        #print('5')
+        try:
+        #if mp.is_time_between() and mt5.symbol_info('AUDUSD').spread <12:                      
+         
+            trade('AUDUSD',lot=0.01,sleeptime=300)
+        except Exception or AttributeError or IndexError:
+            pass
+def infiniteloop4():
+    while 1:  
+        #print('15')
+        try:   
+        #if mp.is_time_between() and mt5.symbol_info('AUDUSD').spread <12:               
+            
+            trade('AUDUSD',lot=0.01,sleeptime=900)
+        except Exception or AttributeError or IndexError:
+            pass
+# def infiniteloop5():
+#     while 1:    
+#         #print('5')
+#         # try:
+#         if mp.is_time_between() and mt5.symbol_info('USDJPY').spread <12:                      
+#             data1 = mp.historical_M5('USDJPY',50000)
+#             data2m = mp.historical_M1('USDJPY',50000)
+#             trade('USDJPY',lot=50.0,df=data1,sleeptime=300,df1m=data2m)
+# def infiniteloop6():
+#     while 1:  
+#         #print('15')
+#         # try:   
+#         if mp.is_time_between() and mt5.symbol_info('USDJPY').spread <12:               
+#             data2 = mp.historical_M15('USDJPY',50000)
+#             data2m = mp.historical_M5('USDJPY',50000)
+#             trade('USDJPY',lot=50.0,df=data2,sleeptime=900,df1m=data2m)
+# def infiniteloop3():
+#     while 1:    
+#         #print('60')
+#         # try:
+#         for i in tradelist:                      
+#             data3 = mp.historical_H1(i,50000)
+#             trade(i,lot=2.0,df=data3,sleeptime=3600)
+thread1 = threading.Thread(target=infiniteloop1)
+thread1.start()
+
+thread2 = threading.Thread(target=infiniteloop2)
+thread2.start()    
+
+thread3 = threading.Thread(target=infiniteloop3)
+thread3.start()
+
+thread4 = threading.Thread(target=infiniteloop4)
+thread4.start()    
+
+# thread5 = threading.Thread(target=infiniteloop5)
+# thread5.start()
+
+# thread6 = threading.Thread(target=infiniteloop6)
+# thread6.start()    
+
+# thread3 = threading.Thread(target=infiniteloop3)
+# thread3.start()     
+    #print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
+    # except IndexError or KeyError: 
+    #     pass 
